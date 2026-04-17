@@ -1,98 +1,264 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Stage 1 — Profiles API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS REST API that accepts a name, calls three external APIs (Genderize, Agify, Nationalize), applies classification logic, stores the result in a PostgreSQL database, and exposes endpoints to manage that data.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Live URL
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ pnpm install
+```
+https://brightstage1task-production.up.railway.app
 ```
 
-## Compile and run the project
+## Tech Stack
+
+- **Framework:** NestJS
+- **Language:** TypeScript
+- **ORM:** TypeORM
+- **Database:** PostgreSQL
+- **HTTP Client:** Axios (`@nestjs/axios`)
+- **Package Manager:** pnpm
+- **Deployment:** Railway
+
+## External APIs Used
+
+| API | URL | Purpose |
+|-----|-----|---------|
+| Genderize | https://api.genderize.io | Gender prediction |
+| Agify | https://api.agify.io | Age prediction |
+| Nationalize | https://api.nationalize.io | Nationality prediction |
+
+## Classification Logic
+
+**Age group** (from Agify):
+| Age Range | Group |
+|-----------|-------|
+| 0 – 12 | child |
+| 13 – 19 | teenager |
+| 20 – 59 | adult |
+| 60+ | senior |
+
+**Nationality** — the country with the highest probability from the Nationalize response is selected.
+
+## Endpoints
+
+### 1. Create Profile
+
+```
+POST /api/profiles
+```
+
+**Request body:**
+```json
+{ "name": "ella" }
+```
+
+**Success Response — 201 Created:**
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "019d9b17-b5c8-7f39-bd93-0b0ad44ce94f",
+    "name": "emem",
+    "gender": "female",
+    "gender_probability": 0.99,
+    "sample_size": 1234,
+    "age": 46,
+    "age_group": "adult",
+    "country_id": "US",
+    "country_probability": 0.085,
+    "created_at": "2026-04-17T10:43:32.511Z"
+  }
+}
+```
+
+**If name already exists — 200:**
+```json
+{
+  "status": "success",
+  "message": "Profile already exists",
+  "data": { ...existing profile... }
+}
+```
+
+---
+
+### 2. Get All Profiles
+
+```
+GET /api/profiles
+```
+
+**Optional query parameters** (all case-insensitive):
+
+| Parameter | Example |
+|-----------|---------|
+| gender | ?gender=male |
+| country_id | ?country_id=NG |
+| age_group | ?age_group=adult |
+
+**Example:**
+```
+GET /api/profiles?gender=male&country_id=NG
+```
+
+**Success Response — 200:**
+```json
+{
+  "status": "success",
+  "count": 2,
+  "data": [
+    {
+      "id": "id-1",
+      "name": "christian",
+      "gender": "male",
+      "age": 46,
+      "age_group": "adult",
+      "country_id": "NG"
+    }
+  ]
+}
+```
+
+---
+
+### 3. Get Single Profile
+
+```
+GET /api/profiles/:id
+```
+
+**Success Response — 200:**
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "019d9b17-b5c8-7f39-bd93-0b0ad44ce94f",
+    "name": "christian",
+    "gender": "male",
+    "gender_probability": 0.99,
+    "sample_size": 1234,
+    "age": 46,
+    "age_group": "adult",
+    "country_id": "NG",
+    "country_probability": 0.85,
+    "created_at": "2026-04-17T10:43:32.511Z"
+  }
+}
+```
+
+---
+
+### 4. Delete Profile
+
+```
+DELETE /api/profiles/:id
+```
+
+**Success Response — 204 No Content**
+
+---
+
+## Error Responses
+
+All errors follow this structure:
+
+```json
+{ "status": "error", "message": "<error message>" }
+```
+
+| Status | Reason |
+|--------|--------|
+| 400 | Missing or empty name |
+| 422 | name is not a string |
+| 404 | Profile not found |
+| 502 | External API returned an invalid response |
+
+**502 edge cases:**
+
+| Condition | Message |
+|-----------|---------|
+| Genderize returns gender: null or count: 0 | `Genderize returned an invalid response` |
+| Agify returns age: null | `Agify returned an invalid response` |
+| Nationalize returns no country data | `Nationalize returned an invalid response` |
+
+---
+
+## Project Structure
+
+```
+src/
+  profiles/
+    dto/
+      create-profile.dto.ts
+    entity/
+      profile.entity.ts
+    profiles.controller.ts
+    profiles.service.ts
+    profiles.module.ts
+  app.module.ts
+  main.ts
+```
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm
+- PostgreSQL
+
+### Installation
+
+```bash
+pnpm install
+```
+
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:5432/brightstage1task"
+```
+
+### Running Locally
 
 ```bash
 # development
-$ pnpm run start
+pnpm run start:dev
 
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+# production
+pnpm run build
+pnpm run start:prod
 ```
 
-## Run tests
+### Testing Endpoints
 
 ```bash
-# unit tests
-$ pnpm run test
+# Create profile
+curl -X POST https://brightstage1task-production.up.railway.app/api/profiles \
+  -H "Content-Type: application/json" \
+  -d '{"name": "christian"}'
 
-# e2e tests
-$ pnpm run test:e2e
+# Get all profiles
+curl https://brightstage1task-production.up.railway.app/api/profiles
 
-# test coverage
-$ pnpm run test:cov
+# Get with filters
+curl "https://brightstage1task-production.up.railway.app/api/profiles?gender=male"
+
+# Get single profile
+curl https://brightstage1task-production.up.railway.app/api/profiles/{id}
+
+# Delete profile
+curl -X DELETE https://brightstage1task-production.up.railway.app/api/profiles/{id}
 ```
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Deployed on **Railway** with a managed PostgreSQL database.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Environment variables required on Railway:
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string (provided by Railway Postgres service) |
+| `PORT` | Injected automatically by Railway |
