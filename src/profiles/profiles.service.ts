@@ -1,10 +1,15 @@
-import { Injectable, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { uuidv7 } from 'uuidv7';
-import { Profile } from 'src/profiles/entity/profile.entity';
+import { Profile } from './entity/profile.entity';
 
 @Injectable()
 export class ProfilesService {
@@ -24,7 +29,6 @@ export class ProfilesService {
   async create(name: string) {
     const normalized = name.trim().toLowerCase();
 
-    // Check if profile already exists
     const existing = await this.profileRepo.findOne({
       where: { name: normalized },
     });
@@ -37,19 +41,24 @@ export class ProfilesService {
       };
     }
 
-    // Call all three APIs in parallel
     let genderData: any, agifyData: any, nationalizeData: any;
 
     try {
       const [genderRes, agifyRes, nationalizeRes] = await Promise.all([
         firstValueFrom(
-          this.httpService.get('https://api.genderize.io', { params: { name: normalized } }),
+          this.httpService.get('https://api.genderize.io', {
+            params: { name: normalized },
+          }),
         ),
         firstValueFrom(
-          this.httpService.get('https://api.agify.io', { params: { name: normalized } }),
+          this.httpService.get('https://api.agify.io', {
+            params: { name: normalized },
+          }),
         ),
         firstValueFrom(
-          this.httpService.get('https://api.nationalize.io', { params: { name: normalized } }),
+          this.httpService.get('https://api.nationalize.io', {
+            params: { name: normalized },
+          }),
         ),
       ]);
 
@@ -63,7 +72,6 @@ export class ProfilesService {
       );
     }
 
-    // Validate each API response
     if (genderData.gender === null || genderData.count === 0) {
       throw new HttpException(
         { status: 'error', message: 'Genderize returned an invalid response' },
@@ -80,27 +88,41 @@ export class ProfilesService {
 
     if (!nationalizeData.country || nationalizeData.country.length === 0) {
       throw new HttpException(
-        { status: 'error', message: 'Nationalize returned an invalid response' },
+        {
+          status: 'error',
+          message: 'Nationalize returned an invalid response',
+        },
         HttpStatus.BAD_GATEWAY,
       );
     }
 
-    // Pick country with highest probability
     const topCountry = nationalizeData.country.reduce(
       (best: any, current: any) =>
         current.probability > best.probability ? current : best,
       nationalizeData.country[0],
     );
 
+    // Get country name from a lookup map
+    const countryNames: Record<string, string> = {
+      NG: 'Nigeria', US: 'United States', GB: 'United Kingdom',
+      KE: 'Kenya', GH: 'Ghana', ZA: 'South Africa', TZ: 'Tanzania',
+      ET: 'Ethiopia', UG: 'Uganda', RW: 'Rwanda', CM: 'Cameroon',
+      SN: 'Senegal', CI: "Côte d'Ivoire", ML: 'Mali', BJ: 'Benin',
+      CD: 'DR Congo', AO: 'Angola', MZ: 'Mozambique', ZM: 'Zambia',
+      ZW: 'Zimbabwe', SD: 'Sudan', MA: 'Morocco', TN: 'Tunisia',
+      EG: 'Egypt', IN: 'India', BR: 'Brazil', FR: 'France',
+      AU: 'Australia', JP: 'Japan', DE: 'Germany', CA: 'Canada',
+    };
+
     const profile = this.profileRepo.create({
       id: uuidv7(),
       name: normalized,
       gender: genderData.gender,
       gender_probability: genderData.probability,
-      sample_size: genderData.count,
       age: agifyData.age,
       age_group: this.getAgeGroup(agifyData.age),
       country_id: topCountry.country_id,
+      country_name: countryNames[topCountry.country_id] ?? topCountry.country_id,
       country_probability: topCountry.probability,
     });
 
@@ -112,33 +134,206 @@ export class ProfilesService {
     };
   }
 
-  async findAll(query: { gender?: string; country_id?: string; age_group?: string }) {
+  async findAll(query: {
+    gender?: string;
+    age_group?: string;
+    country_id?: string;
+    min_age?: string;
+    max_age?: string;
+    min_gender_probability?: string;
+    min_country_probability?: string;
+    sort_by?: string;
+    order?: string;
+    page?: string;
+    limit?: string;
+  }) {
+    // Validate sort_by and order
+    const allowedSortBy = ['age', 'created_at', 'gender_probability'];
+    const allowedOrder = ['asc', 'desc'];
+
+    if (query.sort_by && !allowedSortBy.includes(query.sort_by)) {
+      throw new HttpException(
+        { status: 'error', message: 'Invalid query parameters' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (query.order && !allowedOrder.includes(query.order.toLowerCase())) {
+      throw new HttpException(
+        { status: 'error', message: 'Invalid query parameters' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Pagination
+    const page = Math.max(1, parseInt(query.page ?? '1', 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(query.limit ?? '10', 10) || 10));
+    const skip = (page - 1) * limit;
+
     const qb = this.profileRepo.createQueryBuilder('profile');
 
+    // Filters
     if (query.gender) {
-      qb.andWhere('LOWER(profile.gender) = LOWER(:gender)', { gender: query.gender });
-    }
-    if (query.country_id) {
-      qb.andWhere('LOWER(profile.country_id) = LOWER(:country_id)', { country_id: query.country_id });
-    }
-    if (query.age_group) {
-      qb.andWhere('LOWER(profile.age_group) = LOWER(:age_group)', { age_group: query.age_group });
+      qb.andWhere('LOWER(profile.gender) = LOWER(:gender)', {
+        gender: query.gender,
+      });
     }
 
-    const profiles = await qb.getMany();
+    if (query.age_group) {
+      qb.andWhere('LOWER(profile.age_group) = LOWER(:age_group)', {
+        age_group: query.age_group,
+      });
+    }
+
+    if (query.country_id) {
+      qb.andWhere('LOWER(profile.country_id) = LOWER(:country_id)', {
+        country_id: query.country_id,
+      });
+    }
+
+    if (query.min_age) {
+      qb.andWhere('profile.age >= :min_age', {
+        min_age: parseInt(query.min_age, 10),
+      });
+    }
+
+    if (query.max_age) {
+      qb.andWhere('profile.age <= :max_age', {
+        max_age: parseInt(query.max_age, 10),
+      });
+    }
+
+    if (query.min_gender_probability) {
+      qb.andWhere('profile.gender_probability >= :min_gender_probability', {
+        min_gender_probability: parseFloat(query.min_gender_probability),
+      });
+    }
+
+    if (query.min_country_probability) {
+      qb.andWhere('profile.country_probability >= :min_country_probability', {
+        min_country_probability: parseFloat(query.min_country_probability),
+      });
+    }
+
+    // Sorting
+    const sortField = query.sort_by ?? 'created_at';
+    const sortOrder = (query.order?.toUpperCase() ?? 'ASC') as 'ASC' | 'DESC';
+    qb.orderBy(`profile.${sortField}`, sortOrder);
+
+    // Pagination
+    qb.skip(skip).take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
 
     return {
       status: 'success',
-      count: profiles.length,
-      data: profiles.map((p) => ({
-        id: p.id,
-        name: p.name,
-        gender: p.gender,
-        age: p.age,
-        age_group: p.age_group,
-        country_id: p.country_id,
-      })),
+      page,
+      limit,
+      total,
+      data,
     };
+  }
+
+  async search(q: string, page?: string, limit?: string) {
+    const filters = this.parseNaturalLanguage(q);
+
+    if (!filters) {
+      throw new HttpException(
+        { status: 'error', message: 'Unable to interpret query' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return this.findAll({ ...filters, page, limit });
+  }
+
+  private parseNaturalLanguage(q: string): Record<string, string> | null {
+    const lower = q.toLowerCase().trim();
+    const filters: Record<string, string> = {};
+    let matched = false;
+
+    // Gender
+    if (/\bmales?\b/.test(lower)) {
+      filters.gender = 'male';
+      matched = true;
+    } else if (/\bfemales?\b|\bwomen\b|\bwoman\b|\bgirls?\b/.test(lower)) {
+      filters.gender = 'female';
+      matched = true;
+    }
+
+    // Age group keywords
+    if (/\bchildren\b|\bchild\b|\bkids?\b/.test(lower)) {
+      filters.age_group = 'child';
+      matched = true;
+    } else if (/\bteenagers?\b|\bteens?\b/.test(lower)) {
+      filters.age_group = 'teenager';
+      matched = true;
+    } else if (/\badults?\b/.test(lower)) {
+      filters.age_group = 'adult';
+      matched = true;
+    } else if (/\bseniors?\b|\belderly\b|\bold\b/.test(lower)) {
+      filters.age_group = 'senior';
+      matched = true;
+    }
+
+    // "young" maps to ages 16-24
+    if (/\byoung\b/.test(lower)) {
+      filters.min_age = '16';
+      filters.max_age = '24';
+      matched = true;
+    }
+
+    // Age patterns: "above 30", "over 30", "older than 30"
+    const aboveMatch = lower.match(/(?:above|over|older than)\s+(\d+)/);
+    if (aboveMatch) {
+      filters.min_age = aboveMatch[1];
+      matched = true;
+    }
+
+    // "below 20", "under 20", "younger than 20"
+    const belowMatch = lower.match(/(?:below|under|younger than)\s+(\d+)/);
+    if (belowMatch) {
+      filters.max_age = belowMatch[1];
+      matched = true;
+    }
+
+    // "between 20 and 40"
+    const betweenMatch = lower.match(/between\s+(\d+)\s+and\s+(\d+)/);
+    if (betweenMatch) {
+      filters.min_age = betweenMatch[1];
+      filters.max_age = betweenMatch[2];
+      matched = true;
+    }
+
+    // Country patterns: "from nigeria", "in kenya", "in/from + country name"
+    const countryMap: Record<string, string> = {
+      nigeria: 'NG', kenya: 'KE', ghana: 'GH', 'south africa': 'ZA',
+      tanzania: 'TZ', ethiopia: 'ET', uganda: 'UG', rwanda: 'RW',
+      cameroon: 'CM', senegal: 'SN', "côte d'ivoire": 'CI', 'ivory coast': 'CI',
+      mali: 'ML', benin: 'BJ', 'dr congo': 'CD', congo: 'CG',
+      angola: 'AO', mozambique: 'MZ', zambia: 'ZM', zimbabwe: 'ZW',
+      sudan: 'SD', morocco: 'MA', tunisia: 'TN', egypt: 'EG',
+      india: 'IN', brazil: 'BR', france: 'FR', australia: 'AU',
+      japan: 'JP', germany: 'DE', canada: 'CA', 'united states': 'US',
+      usa: 'US', 'united kingdom': 'GB', uk: 'GB', gabon: 'GA',
+      namibia: 'NA', malawi: 'MW', somalia: 'SO', eritrea: 'ER',
+      gambia: 'GM', niger: 'NE', madagascar: 'MG',
+    };
+
+    for (const [countryName, code] of Object.entries(countryMap)) {
+      const regex = new RegExp(
+        `(?:from|in|of)\\s+${countryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      );
+      if (regex.test(lower)) {
+        filters.country_id = code;
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) return null;
+
+    return filters;
   }
 
   async findOne(id: string) {

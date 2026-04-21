@@ -15,16 +15,16 @@ export class Profile {
   gender_probability: number;
 
   @Column('int')
-  sample_size: number;
-
-  @Column('int')
   age: number;
 
   @Column()
   age_group: string;
 
-  @Column()
+  @Column({ length: 2 })
   country_id: string;
+
+  @Column()
+  country_name: string;
 
   @Column('float')
   country_probability: number;
