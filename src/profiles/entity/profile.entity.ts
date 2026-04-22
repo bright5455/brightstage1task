@@ -23,7 +23,7 @@ export class Profile {
   @Column({ length: 2 })
   country_id: string;
 
-  @Column()
+  @Column({ default: 'unknown' })
   country_name: string;
 
   @Column('float')
