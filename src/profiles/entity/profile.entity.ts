@@ -17,7 +17,7 @@ export class Profile {
   @Column('int')
   age: number;
 
-  @Column({ nullable: true })
+  @Column({ default: 'unknown' })
   age_group: string;
 
   @Column({ length: 2 })
