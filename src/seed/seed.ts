@@ -7,8 +7,9 @@ async function seed() {
   await AppDataSource.initialize();
   const repo = AppDataSource.getRepository(Profile);
 
-  // Clear existing data cleanly before seeding
-  await repo.query('TRUNCATE TABLE profiles CASCADE');
+  // Delete all existing records first
+  await repo.query('DELETE FROM profiles');
+  console.log('Cleared existing profiles');
 
   console.log(`Seeding ${seedData.profiles.length} profiles...`);
 
