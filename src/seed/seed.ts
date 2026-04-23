@@ -6,22 +6,15 @@ import * as seedData from './profiles.json';
 async function seed() {
   await AppDataSource.initialize();
   const repo = AppDataSource.getRepository(Profile);
- await AppDataSource.synchronize(true);
+
+  // Clear existing data cleanly before seeding
+  await repo.query('TRUNCATE TABLE profiles CASCADE');
+
   console.log(`Seeding ${seedData.profiles.length} profiles...`);
 
   let inserted = 0;
-  let skipped = 0;
 
   for (const p of seedData.profiles) {
-    const existing = await repo.findOne({
-      where: { name: p.name.toLowerCase() },
-    });
-
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
     await repo.save(
       repo.create({
         id: uuidv7(),
@@ -35,11 +28,10 @@ async function seed() {
         country_probability: p.country_probability,
       }),
     );
-
     inserted++;
   }
 
-  console.log(`Done. Inserted: ${inserted}, Skipped: ${skipped}`);
+  console.log(`Done. Inserted: ${inserted}`);
   await AppDataSource.destroy();
 }
 

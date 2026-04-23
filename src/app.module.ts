@@ -14,7 +14,7 @@ import { Profile } from 'src/profiles/entity/profile.entity';
         type: 'postgres',
         url: config.get<string>('DATABASE_URL'),
         entities: [Profile],
-        synchronize: true,
+        synchronize: false,
         ssl: false,
       }),
     }),
