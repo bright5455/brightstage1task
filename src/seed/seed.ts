@@ -7,12 +7,7 @@ async function seed() {
   await AppDataSource.initialize();
   const repo = AppDataSource.getRepository(Profile);
 
-  // Delete all existing records first
   await repo.query('DELETE FROM profiles');
-  console.log('Cleared existing profiles');
-
-  console.log(`Seeding ${seedData.profiles.length} profiles...`);
-
   let inserted = 0;
 
   for (const p of seedData.profiles) {

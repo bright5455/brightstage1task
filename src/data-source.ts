@@ -5,7 +5,6 @@ dotenv.config();
 if (!process.env.DATABASE_URL) {
   dotenv.config();
 }
-console.log('Connecting to:', process.env.DATABASE_URL);
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
