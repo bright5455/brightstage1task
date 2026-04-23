@@ -6,7 +6,7 @@ import * as seedData from './profiles.json';
 async function seed() {
   await AppDataSource.initialize();
   const repo = AppDataSource.getRepository(Profile);
-
+ await AppDataSource.synchronize(true);
   console.log(`Seeding ${seedData.profiles.length} profiles...`);
 
   let inserted = 0;
